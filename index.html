@@ -11,7 +11,7 @@
 <nav><button class="active" data-tab="home">START</button><button data-tab="ai">KI CHAT</button><button data-tab="voice">VOICE</button><button data-tab="tasks">AGENT</button><button data-tab="homecontrol">HOME</button><button data-tab="memory">MEMORY</button><button data-tab="tools">CODE</button></nav>
 <main>
 <section class="panel active" id="home"><div class="card"><h2>WARVEX CORE</h2><div class="clock" id="clock">--:--:--</div><p id="date" style="text-align:center"></p><p id="systemInfo">SYSTEM BEREIT</p></div>
-<div class="card"><h2>LOKALE KI</h2><p>SmolLM2 · WebLLM · Browser-KI</p><div id="aiStatus">KI noch nicht geladen.</div><div id="progress">Warte auf Start.</div><div class="actions"><button id="loadAI">KI LADEN</button><button id="stopAI" class="secondary">STOPP</button></div><p class="small">Der erste Download kann groß sein. WebGPU und ausreichend Gerätespeicher werden benötigt. Die KI läuft lokal im Browser.</p></div>
+<div class="card"><h2>WARVEX CLOUD AI</h2><p>Cloudflare Workers AI · KI läuft auf Cloud-Servern</p><div id="aiStatus">KI noch nicht geladen.</div><div id="progress">Warte auf Start.</div><div class="actions"><button id="loadAI">KI LADEN</button><button id="stopAI" class="secondary">STOPP</button></div><p class="small">Die KI läuft über Cloudflare. Eine aktive Internetverbindung ist erforderlich.</p></div>
 <div class="card"><h2>SCHNELLSTART</h2><div class="actions"><button data-tab="ai">KI CHAT</button><button data-tab="voice">SPRACHCHAT</button><button data-tab="tools">PROGRAMMIERER</button></div></div></section>
 <section class="panel" id="ai"><div class="card"><h2>WARVEX AI CHAT</h2><div id="chat"></div><textarea id="message" placeholder="Schreibe WARVEX..."></textarea><div class="actions"><button id="send">SENDEN</button><button id="clearChat" class="secondary">CHAT LÖSCHEN</button></div></div></section>
 <section class="panel" id="voice"><div class="card"><h2>WARVEX VOICE</h2><p id="voiceStatus">Sprachsteuerung bereit.</p><p class="small" id="voiceDetail">Lade zuerst die KI und erlaube den Mikrofonzugriff.</p><button id="voiceButton" style="width:100%">SPRACHCHAT STARTEN</button><button id="wakeButton" class="secondary" style="width:100%;margin-top:8px">HEY WARVEX AKTIVIEREN</button><button id="testVoice" class="secondary" style="width:100%;margin-top:8px">STIMME TESTEN</button><button id="stopVoice" class="secondary" style="width:100%;margin-top:8px">SPRACHE STOPPEN</button></div></section>
@@ -34,9 +34,58 @@ function updateClock(){const n=new Date();$('clock').textContent=n.toLocaleTimeS
 history=getData('warvex_chat',[]);if(!Array.isArray(history))history=[];
 function addMessage(text,role,save=true){const d=document.createElement('div');d.className='message '+(role==='user'?'user':'ai');d.textContent=String(text);$('chat').append(d);$('chat').scrollTop=$('chat').scrollHeight;if(save){history.push({role:role==='user'?'user':'assistant',content:String(text)});history=history.slice(-40);saveData('warvex_chat',history)}}
 function renderChat(){$('chat').replaceChildren();history.forEach(m=>{const d=document.createElement('div');d.className='message '+(m.role==='user'?'user':'ai');d.textContent=m.content||'';$('chat').append(d)});$('chat').scrollTop=$('chat').scrollHeight}renderChat();if(!history.length)addMessage('WARVEX SYSTEMS gestartet. Lade die KI und beginne deinen Chat.','assistant');
-async function loadAI(){if(loading||engine)return;if(!navigator.gpu){$('aiStatus').textContent='WebGPU wird nicht unterstützt.';$('progress').textContent='Dieser Browser oder dieses Gerät unterstützt WebGPU möglicherweise nicht.';notify('WebGPU nicht verfügbar.');return}loading=true;stopRequested=false;$('loadAI').disabled=true;$('loadAI').textContent='KI LÄDT...';$('aiStatus').textContent='Verbinde mit WebLLM...';$('status').textContent='● KI STARTET';try{const w=await import('https://esm.run/@mlc-ai/web-llm');if(stopRequested)throw Error('Ladevorgang gestoppt.');const newEngine=await w.CreateMLCEngine(MODEL,{initProgressCallback:p=>{$('progress').textContent=p.text||'Modell wird geladen...'}});if(stopRequested){await newEngine.unload();throw Error('Ladevorgang gestoppt.')}engine=newEngine;$('aiStatus').textContent='WARVEX-KI ist bereit.';$('progress').textContent='SmolLM2 erfolgreich geladen.';$('loadAI').textContent='KI BEREIT';$('status').textContent='● KI ONLINE';$('systemInfo').textContent='LOKALE KI ERFOLGREICH GESTARTET';notify('WARVEX KI ist online.');addMessage('Ich bin bereit. Was möchtest du machen?','assistant')}catch(e){engine=null;$('aiStatus').textContent='KI konnte nicht geladen werden.';$('progress').textContent=e?.message||String(e);$('loadAI').textContent='ERNEUT VERSUCHEN';$('status').textContent='● OFFLINE';notify('KI-Ladefehler: '+(e?.message||e))}finally{loading=false;$('loadAI').disabled=false}}$('loadAI').addEventListener('click',loadAI);$('stopAI').addEventListener('click',async()=>{stopRequested=true;if(engine){try{await engine.unload()}catch(e){}engine=null}$('aiStatus').textContent='KI gestoppt.';$('loadAI').textContent='KI ERNEUT LADEN';$('status').textContent='● BEREIT';notify('KI gestoppt.')});
+async function loadAI(){
+  if(loading || engine) return;
+  loading=true;
+  stopRequested=false;
+  $('loadAI').disabled=true;
+  $('loadAI').textContent='VERBINDE...';
+  $('aiStatus').textContent='Verbinde mit Cloudflare AI...';
+  $('status').textContent='● VERBINDET';
+  try {
+    const response=await fetch('/api/chat',{method:'GET',cache:'no-store'});
+    const data=await response.json();
+    if(!response.ok || !data.ok || !data.aiBinding) {
+      throw new Error(data.error || 'Cloudflare AI ist nicht verbunden. Prüfe die Bindung AI.');
+    }
+    engine={cloud:true};
+    $('aiStatus').textContent='Cloudflare KI ist bereit.';
+    $('progress').textContent='WARVEX Cloud AI verbunden.';
+    $('loadAI').textContent='KI BEREIT';
+    $('status').textContent='● KI ONLINE';
+    $('systemInfo').textContent='CLOUDFLARE AI ONLINE';
+    notify('WARVEX Cloud AI ist online.');
+    addMessage('WARVEX Cloud AI ist bereit. Was möchtest du machen?','assistant');
+  } catch(e) {
+    engine=null;
+    $('aiStatus').textContent='Cloud-KI konnte nicht verbunden werden.';
+    $('progress').textContent=e?.message||String(e);
+    $('loadAI').textContent='ERNEUT VERBINDEN';
+    $('status').textContent='● OFFLINE';
+    notify('Verbindungsfehler: '+(e?.message||e));
+  } finally {
+    loading=false;
+    $('loadAI').disabled=false;
+  }
+}$('loadAI').addEventListener('click',loadAI);$('stopAI').addEventListener('click',async()=>{stopRequested=true;if(engine){try{if(typeof engine.unload==='function')await engine.unload()}catch(e){}engine=null}$('aiStatus').textContent='KI gestoppt.';$('loadAI').textContent='KI ERNEUT LADEN';$('status').textContent='● BEREIT';notify('KI gestoppt.')});
 const SYSTEM_PROMPT='Du bist WARVEX, ein hilfreicher deutschsprachiger KI-Assistent. Dein Name ist WARVEX SYSTEMS. Antworte verständlich, freundlich und direkt. Du kannst erklären, Ideen entwickeln, Texte schreiben und Programmiercode erstellen. Behaupte nicht, Aktionen ausgeführt zu haben, die du nicht ausführen kannst. Antworte normalerweise auf Deutsch.';
-async function askAI(prompt,alreadyInHistory=false){if(!engine)throw Error('Bitte zuerst die KI laden.');const msgs=[{role:'system',content:SYSTEM_PROMPT+'\nAktuelle Uhrzeit: '+new Date().toLocaleString('de-DE')},...history.slice(-16).map(m=>({role:m.role,content:m.content}))];if(!alreadyInHistory)msgs.push({role:'user',content:prompt});const r=await engine.chat.completions.create({messages:msgs,temperature:.7,max_tokens:900});const a=r.choices?.[0]?.message?.content;if(!a)throw Error('Keine KI-Antwort erhalten.');return a.trim()}
+async function askAI(prompt,alreadyInHistory=false){
+  if(!engine || !engine.cloud) throw Error('Bitte zuerst WARVEX Cloud AI verbinden.');
+  const msgs=[
+    {role:'system',content:SYSTEM_PROMPT+'\\nAktuelle Uhrzeit: '+new Date().toLocaleString('de-DE')},
+    ...history.slice(-16).map(m=>({role:m.role,content:m.content}))
+  ];
+  if(!alreadyInHistory) msgs.push({role:'user',content:prompt});
+  const response=await fetch('/api/chat',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({messages:msgs})
+  });
+  const data=await response.json();
+  if(!response.ok) throw Error(data.error||'Cloudflare KI Fehler');
+  if(!data.answer) throw Error('Keine KI-Antwort erhalten.');
+  return data.answer.trim();
+}
 async function sendMessage(){const t=$('message').value.trim();if(!t||busy)return;if(!engine){notify('Bitte zuerst KI LADEN.');return}$('message').value='';addMessage(t,'user');busy=true;$('send').disabled=true;$('send').textContent='KI DENKT...';try{addMessage(await askAI(t,true),'assistant')}catch(e){addMessage('KI-Fehler: '+(e?.message||e),'assistant')}finally{busy=false;$('send').disabled=false;$('send').textContent='SENDEN'}}
 $('send').addEventListener('click',sendMessage);$('message').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});$('clearChat').addEventListener('click',()=>{if(!confirm('Chat wirklich löschen?'))return;history=[];saveData('warvex_chat',history);$('chat').replaceChildren();addMessage('Neuer Chat gestartet.','assistant')});
 
