@@ -1,1 +1,258 @@
 
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080808">
+<title>WARVEX SYSTEMS V6</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;background:#080808;color:#eee;
+ font-family:Arial,sans-serif;
+}
+header{
+ background:#101010;text-align:center;
+ padding:20px;border-bottom:2px solid #e00030;
+}
+h1{color:#ff1744;letter-spacing:3px}
+#clock{font-size:38px;color:#ff1744}
+main{max-width:650px;margin:auto;padding:14px}
+.panel{
+ background:#151515;border:1px solid #383838;
+ border-radius:13px;padding:16px;margin-bottom:15px;
+}
+button{
+ background:#c00030;color:white;border:0;
+ border-radius:9px;padding:13px;
+ margin:4px;cursor:pointer;
+ font-size:15px;
+}
+button:active{background:#ff365e}
+input{
+ width:100%;padding:13px;background:#222;
+ border:1px solid #555;color:white;
+ border-radius:8px;margin:8px 0;
+}
+#chat{
+ height:230px;overflow-y:auto;
+ background:#090909;padding:10px;
+ border-radius:8px;
+}
+.msg{padding:10px;margin:7px 0;border-radius:8px}
+.user{background:#292929}
+.ai{background:#40101a}
+.status{color:#ff365e}
+</style>
+</head>
+
+<body>
+
+<header>
+<h1>WARVEX SYSTEMS</h1>
+<div id="clock">00:00:00</div>
+<p>ARTIFICIAL INTELLIGENCE SYSTEM V6.0</p>
+</header>
+
+<main>
+
+<div class="panel">
+<h3>⚙️ SYSTEM STATUS</h3>
+<p id="status" class="status">SYSTEM ONLINE</p>
+<button onclick="checkSystem()">System testen</button>
+</div>
+
+<div class="panel">
+<h3>🤖 WARVEX AI</h3>
+<div id="chat"></div>
+<input id="message" placeholder="Schreibe WARVEX...">
+<button onclick="sendMessage()">Senden</button>
+<button onclick="startVoice()">🎙️ Mikrofon AN</button>
+<button onclick="stopVoice()">Mikrofon AUS</button>
+<button onclick="speakLast()">🔊 Vorlesen</button>
+</div>
+
+<div class="panel">
+<h3>🌐 WEB SYSTEM</h3>
+<input id="search" placeholder="Suchbegriff eingeben">
+<button onclick="webSearch()">Websuche starten</button>
+</div>
+
+<div class="panel">
+<h3>🕒 ZEITSYSTEM</h3>
+<p id="date"></p>
+<button onclick="showDate()">Datum aktualisieren</button>
+</div>
+
+<div class="panel">
+<h3>🛠️ SYSTEMSTEUERUNG</h3>
+<button onclick="clearChat()">Chat löschen</button>
+<button onclick="checkSystem()">Status anzeigen</button>
+</div>
+
+</main>
+
+<script>
+"use strict";
+
+const $=id=>document.getElementById(id);
+let lastAnswer="";
+let recognition=null;
+
+function clockUpdate(){
+ $("clock").textContent=new Date().toLocaleTimeString("de-DE");
+}
+setInterval(clockUpdate,1000);
+clockUpdate();
+
+function addMessage(message,type){
+ const div=document.createElement("div");
+ div.className="msg "+type;
+ div.textContent=message;
+ $("chat").appendChild(div);
+ $("chat").scrollTop=$("chat").scrollHeight;
+}
+
+function generateAnswer(text){
+ const t=text.toLowerCase();
+
+ if(t.includes("hallo")||t.includes("hey"))
+ return "Hallo! WARVEX SYSTEMS ist online.";
+
+ if(t.includes("uhrzeit")||t.includes("zeit"))
+ return "Es ist "+new Date().toLocaleTimeString("de-DE");
+
+ if(t.includes("datum"))
+ return "Heute ist "+new Date().toLocaleDateString("de-DE");
+
+ if(t.includes("status"))
+ return "WARVEX SYSTEMS läuft.";
+
+ if(t.includes("wer bist"))
+ return "Ich bin WARVEX SYSTEMS, dein digitaler Assistent.";
+
+ if(t.includes("hilfe"))
+ return "Du kannst mir schreiben, die Uhrzeit abfragen oder die Websuche verwenden.";
+
+ return "Nachricht empfangen. Für freie intelligente Antworten muss noch ein echter KI-Dienst verbunden werden.";
+}
+
+function sendMessage(){
+ const text=$("message").value.trim();
+ if(!text)return;
+
+ addMessage(text,"user");
+ $("message").value="";
+
+ lastAnswer=generateAnswer(text);
+ addMessage(lastAnswer,"ai");
+}
+
+$("message").addEventListener("keydown",function(e){
+ if(e.key==="Enter")sendMessage();
+});
+
+function speakLast(){
+ if(!lastAnswer){
+ alert("Noch keine Antwort vorhanden.");
+ return;
+ }
+
+ if(!window.speechSynthesis){
+ alert("Sprachausgabe nicht verfügbar.");
+ return;
+ }
+
+ window.speechSynthesis.cancel();
+
+ const speech=new SpeechSynthesisUtterance(lastAnswer);
+ speech.lang="de-DE";
+ speech.rate=0.95;
+ window.speechSynthesis.speak(speech);
+}
+
+function startVoice(){
+ const Speech=window.SpeechRecognition||
+ window.webkitSpeechRecognition;
+
+ if(!Speech){
+ alert("Spracherkennung wird nicht unterstützt. Bitte Chrome verwenden.");
+ return;
+ }
+
+ try{
+ if(recognition)recognition.stop();
+
+ recognition=new Speech();
+ recognition.lang="de-DE";
+ recognition.continuous=false;
+ recognition.interimResults=false;
+
+ recognition.onstart=()=>{
+ $("status").textContent="MIKROFON AKTIV";
+ };
+
+ recognition.onresult=(event)=>{
+ const text=event.results[0][0].transcript;
+ $("message").value=text;
+ sendMessage();
+ speakLast();
+ };
+
+ recognition.onerror=(event)=>{
+ $("status").textContent="SPRACHFEHLER: "+event.error;
+ };
+
+ recognition.onend=()=>{
+ $("status").textContent="SYSTEM ONLINE";
+ };
+
+ recognition.start();
+
+ }catch(error){
+ $("status").textContent="MIKROFON FEHLER";
+ }
+}
+
+function stopVoice(){
+ if(recognition)recognition.stop();
+ if(window.speechSynthesis)window.speechSynthesis.cancel();
+ $("status").textContent="SPRACHSTEUERUNG AUS";
+}
+
+function checkSystem(){
+ $("status").textContent=
+ "SYSTEM ONLINE | "+new Date().toLocaleTimeString("de-DE");
+}
+
+function showDate(){
+ $("date").textContent=new Date().toLocaleDateString("de-DE");
+}
+
+function webSearch(){
+ const query=$("search").value.trim();
+ if(!query){
+ alert("Bitte Suchbegriff eingeben.");
+ return;
+ }
+
+ window.open(
+ "https://www.google.com/search?q="+encodeURIComponent(query),
+ "_blank"
+ );
+}
+
+function clearChat(){
+ $("chat").replaceChildren();
+ lastAnswer="";
+ addMessage("Chat wurde geleert.","ai");
+}
+
+showDate();
+addMessage("WARVEX SYSTEMS V6.0 gestartet. System bereit.","ai");
+
+</script>
+</body>
+</html>
